@@ -112,7 +112,7 @@ function load(){try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r
 let saveFail=false;
 let syncState='local',pushT=null,remote=null,remoteUnsub=null,fbProv=null,fbUser=null;
 function save(){S.ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S));saveFail=false}catch(e){saveFail=true}schedulePush()}
-function schedulePush(){if(!remote)return;clearTimeout(pushT);pushT=setTimeout(async()=>{try{await remote.set({json:JSON.stringify(S),ts:S.ts});syncState='ok'}catch(e){syncState='err'}if(tab==='progreso'&&!sess)render()},700)}
+function schedulePush(){if(!remote)return;clearTimeout(pushT);pushT=setTimeout(async()=>{try{await remote.set({json:JSON.stringify(S),ts:S.ts});syncState='ok';syncErr='';lastSync=new Date()}catch(e){syncState='err';syncErr=(e&&(e.code||e.message))||'desconocido'}if(tab==='progreso'&&!sess)render()},700)}
 function applyRemote(o){S=Object.assign({prefs:defPrefs(),cards:{},read:{},log:{},sims:[]},o);S.prefs=Object.assign(defPrefs(),o.prefs||{});TOP.forEach(t=>{if(!S.prefs.order.includes(t.id))S.prefs.order.push(t.id)});S.prefs.order=S.prefs.order.filter(id=>BY[id]);try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 load();
 /* ---------- plan ---------- */
@@ -346,7 +346,7 @@ function viewProgress(){
   TOP.forEach(t=>{const s=stats(t.cards.map(c=>c.i));h+=`<div class="item"><div class="row sb"><b style="display:inline">${esc(t.name)}</b><span class="small muted">${s.mast}/${s.n}${s.due?` · ${s.due} para repasar`:''}</span></div>${bar(pct(s.seen,s.n),pct(s.mast,s.n))}<div class="row" style="margin-top:8px"><button class="btn sm" data-act="startTopics" data-t="${t.id}">Practicar</button><button class="btn sm" data-act="openTopic" data-t="${t.id}">Teoría</button></div></div>`});
   h+=`</div>`;
   if(S.sims.length)h+=`<div class="card"><h3>Simulacros</h3>${S.sims.slice(-6).reverse().map(x=>`<div class="row sb item"><span>${esc(fmt(x.d))}</span><span class="tag ${pct(x.sc,x.tot)>=80?'ok':pct(x.sc,x.tot)>=60?'warn':'bad'}">${x.sc}/${x.tot} · ${pct(x.sc,x.tot)}%</span></div>`).join('')}</div>`;
-  h+=`<div class="card"><h3>Sincronización</h3><p class="small" role="status">${syncState==='ok'?'<span class="tag ok">Activa</span> Tu progreso se guarda en la nube y aparece en todos tus dispositivos.'+(fbUser?'<br>Cuenta: '+esc(fbUser.email||''):''):syncState==='err'?'<span class="tag bad">Error</span> No pude sincronizar ahora; se guarda en este dispositivo y reintenta en el próximo cambio.':syncState==='signin'?'<span class="tag warn">Falta iniciar sesión</span> Entrá con Google para sincronizar entre dispositivos.':'<span class="tag warn">Solo este dispositivo</span> La sincronización no está configurada. Podés usar la copia de seguridad de abajo.'}</p>${syncState==='signin'?'<button class="btn pri sm" data-act="fbin">Iniciar sesión con Google</button>':''}${fbUser?'<button class="btn sm" data-act="fbout">Cerrar sesión</button>':''}</div><div class="card"><h3>Copia de seguridad</h3><p class="small muted">Alternativa manual. Para pasarlo a otro dispositivo, copiá este texto y pegalo allá.</p><textarea id="bk" aria-label="Datos de progreso" readonly>${esc(JSON.stringify({p:S.prefs,c:S.cards,r:S.read,l:S.log,s:S.sims}))}</textarea><div class="row" style="margin-top:8px"><button class="btn sm" data-act="copy">Copiar</button><button class="btn sm" data-act="imp">Cargar texto pegado</button></div><p class="small" id="bkmsg" role="status"></p>
+  h+=`<div class="card"><h3>Sincronización</h3><p class="small" role="status">${syncState==='ok'?'<span class="tag ok">Activa</span> Tu progreso se guarda en la nube y aparece en todos tus dispositivos.'+(fbUser?'<br>Cuenta: '+esc(fbUser.email||''):'')+(lastSync?'<br><span class="muted">Última sincronización: '+lastSync.toLocaleTimeString('es-AR')+'</span>':''):syncState==='err'?'<span class="tag bad">Error</span> No pude sincronizar ahora ('+esc(syncErr)+'). Se guarda en este dispositivo.':syncState==='signin'?'<span class="tag warn">Falta iniciar sesión</span> Entrá con Google para sincronizar entre dispositivos.':'<span class="tag warn">Solo este dispositivo</span> La sincronización no está configurada. Podés usar la copia de seguridad de abajo.'}</p>${syncState==='signin'?'<button class="btn pri sm" data-act="fbin">Iniciar sesión con Google</button>':''}${remote?'<button class="btn sm pri" data-act="syncnow">Sincronizar ahora</button> ':''}${fbUser?'<button class="btn sm" data-act="fbout">Cerrar sesión</button>':''}</div><div class="card"><h3>Copia de seguridad</h3><p class="small muted">Alternativa manual. Para pasarlo a otro dispositivo, copiá este texto y pegalo allá.</p><textarea id="bk" aria-label="Datos de progreso" readonly>${esc(JSON.stringify({p:S.prefs,c:S.cards,r:S.read,l:S.log,s:S.sims}))}</textarea><div class="row" style="margin-top:8px"><button class="btn sm" data-act="copy">Copiar</button><button class="btn sm" data-act="imp">Cargar texto pegado</button></div><p class="small" id="bkmsg" role="status"></p>
   <div class="row" style="margin-top:6px">${confirmReset?`<button class="btn sm" style="border-color:var(--bad);color:var(--bad)" data-act="reset2">Sí, borrar todo mi progreso</button><button class="btn sm" data-act="reset0">Cancelar</button>`:`<button class="btn sm" data-act="reset1">Borrar progreso</button>`}</div></div>`;
   return h;
 }
@@ -381,7 +381,8 @@ document.addEventListener('click',e=>{
   if(a==='copy'){const ta=$('#bk');ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(_){}try{navigator.clipboard&&navigator.clipboard.writeText(ta.value);ok=true}catch(_){}$('#bkmsg').textContent=ok?'Copiado.':'Seleccioná el texto y copialo manualmente.';return}
   if(a==='imp'){const ta=$('#bk');ta.removeAttribute('readonly');ta.value='';ta.placeholder='Pegá acá el texto y tocá de nuevo «Cargar texto pegado»';ta.focus();b.dataset.act='imp2';b.textContent='Aplicar';return}
   if(a==='imp2'){try{const o=JSON.parse($('#bk').value);S.prefs=Object.assign(defPrefs(),o.p||{});S.cards=o.c||{};S.read=o.r||{};S.log=o.l||{};S.sims=o.s||[];save();render();$('#bkmsg').textContent='Progreso cargado.'}catch(_){$('#bkmsg').textContent='El texto no es válido.'}return}
-  if(a==='fbin'){fbProv&&fbProv.signIn().catch(()=>{syncState='err';render()});return}
+  if(a==='syncnow'){if(remote){S.ts=Date.now();persistLocal();startSync(remote)}return}
+  if(a==='fbin'){fbProv&&fbProv.signIn().catch(e=>{syncState='err';syncErr=(e&&(e.code||e.message))||'login';render()});return}
   if(a==='fbout'){fbProv&&fbProv.signOut();return}
   if(a==='reset1'){confirmReset=true;render();return}
   if(a==='reset0'){confirmReset=false;render();return}
@@ -397,15 +398,38 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('input',e=>{if(e.target.id==='q'){query=e.target.value;const r=$('#tres');if(r)r.innerHTML=theoryList()}});
 render();
+const canon=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((x,y)=>(x[y]=v[y],x),{}):v);
+function mergeState(a,b){
+  const n=a.ts>=b.ts?a:b,o=n===a?b:a;
+  const out={prefs:Object.assign(defPrefs(),o.prefs||{},n.prefs||{}),cards:{},read:Object.assign({},o.read||{},n.read||{}),log:{},sims:[],ts:Math.max(a.ts||0,b.ts||0)};
+  const ids=new Set([...Object.keys(a.cards||{}),...Object.keys(b.cards||{})]);
+  ids.forEach(id=>{const x=(a.cards||{})[id],y=(b.cards||{})[id];if(!x||!y){out.cards[id]=x||y;return}const sx=(x.ok||0)+(x.ko||0),sy=(y.ok||0)+(y.ko||0);out.cards[id]=sx!==sy?(sx>sy?x:y):(x.due>=y.due?x:y)});
+  [a.read||{},b.read||{}].forEach(r=>Object.keys(r).forEach(k=>{if(r[k])out.read[k]=true}));
+  [a.log||{},b.log||{}].forEach(l=>Object.keys(l).forEach(d=>{const c=out.log[d]||(out.log[d]={n:0,ok:0});c.n=Math.max(c.n,l[d].n||0);c.ok=Math.max(c.ok,l[d].ok||0)}));
+  const seen={};[...(a.sims||[]),...(b.sims||[])].forEach(s=>{const k=s.d+'|'+s.sc+'|'+s.tot;if(!seen[k]){seen[k]=1;out.sims.push(s)}});out.sims.sort((x,y)=>x.d<y.d?-1:1);
+  TOP.forEach(tp=>{if(!out.prefs.order.includes(tp.id))out.prefs.order.push(tp.id)});out.prefs.order=out.prefs.order.filter(id=>BY[id]);
+  return out;
+}
+let lastSync=null,syncErr='';
+function persistLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function mergeIn(d){
+  if(!d||!d.json)return false;
+  let rem;try{rem=JSON.parse(d.json)}catch(e){return false}
+  const m=mergeState(S,rem);const changed=canon(m)!==canon(S);
+  if(changed){S=m;persistLocal()}
+  return {changed,needsPush:canon(m)!==canon(rem)};
+}
 async function startSync(r){
   if(remoteUnsub){try{remoteUnsub()}catch(e){}remoteUnsub=null}
   try{
     const d=await r.get();
-    if(d&&(d.ts||0)>(S.ts||0)&&d.json){try{applyRemote(JSON.parse(d.json))}catch(e){}}
-    remote=r;syncState='ok';
-    if(!d||(S.ts||0)>(d.ts||0)){await r.set({json:JSON.stringify(S),ts:S.ts||Date.now()})}
-    remoteUnsub=r.sub(d=>{if(d&&d.json&&(d.ts||0)>(S.ts||0)&&!sess){try{applyRemote(JSON.parse(d.json));render()}catch(e){}}});
-  }catch(e){syncState='err'}
+    let push=true;
+    if(d){const res=mergeIn(d);push=!res||res.needsPush}
+    remote=r;syncState='ok';syncErr='';
+    if(push){await r.set({json:JSON.stringify(S),ts:S.ts||Date.now()})}
+    lastSync=new Date();
+    remoteUnsub=r.sub(d=>{const res=mergeIn(d);lastSync=new Date();if(res&&res.changed&&!sess)render();if(res&&res.needsPush){clearTimeout(pushT);pushT=setTimeout(()=>{remote&&remote.set({json:JSON.stringify(S),ts:S.ts||Date.now()}).catch(()=>{})},300)}});
+  }catch(e){syncState='err';syncErr=(e&&(e.code||e.message))||'desconocido'}
   render();
 }
 async function claudeProvider(){
@@ -432,7 +456,7 @@ async function firebaseProvider(cfg){
       fbProv=await firebaseProvider(cfg);
       fbProv.onUser(async u=>{fbUser=u;if(u){await startSync(fbProv.bind(u))}else{if(remoteUnsub){try{remoteUnsub()}catch(e){}remoteUnsub=null}remote=null;syncState='signin';render()}});
     }
-  }catch(e){syncState='err';render()}
+  }catch(e){syncState='err';syncErr=(e&&(e.code||e.message))||'init';render()}
 })();
 })();
 </script>
